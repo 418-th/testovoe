@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    restart: always
+    ports:
+      - "${REDIS_PORT}:${REDIS_PORT}"
+
+  db:
+    container_name: db
+    image: postgres:13
+    expose:
+      - "${DATABASE_PORT}"
+    env_file:
+      - .env
+    depends_on:
+      - redis
+
+  bet-maker:
+    container_name: bet-maker
+    build: ./bet-maker
+    command: uvicorn app.main:app --reload --host "${BETMAKER_HOST}" --port "${BETMAKER_PORT_IN}"
+    volumes:
+      - ./bet-maker:/usr/src/app
+    ports:
+      - "${BETMAKER_PORT_OUT}:${BETMAKER_PORT_IN}"
+    env_file:
+      - .env
+    depends_on:
+      - db
+
+  line-provider:
+    container_name: line-provider
+    build: ./line-provider
+    command: uvicorn main:app --reload --host "${LINEPROVIDER_HOST}" --port "${LINEPROVIDER_PORT_IN}"
+    volumes:
+      - ./line-provider:/usr/src/app
+    ports:
+      - "${LINEPROVIDER_PORT_OUT}:${LINEPROVIDER_PORT_IN}"
+    depends_on:
+      - redis
+
+  celery-events:
+    container_name: celery-events
+    build: ./line-provider
+    command: celery -A celery_app worker --loglevel=info --concurrency="${CONCURRENCY}" -Q events
+    volumes:
+      - ./line-provider:/usr/src/app
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - db
+
+  celery-bets:
+    container_name: celery-bets
+    build: ./bet-maker
+    command: celery -A app.celery_app worker --loglevel=info --concurrency="${CONCURRENCY}" -Q bets
+    volumes:
+      - ./bet-maker:/usr/src/app
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - db
+
+  celery-beat:
+    container_name: celery-beat
+    build: ./line-provider
+    command: celery -A celery_app beat --loglevel=info
+    volumes:
+      - ./line-provider:/usr/src/app
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - db
