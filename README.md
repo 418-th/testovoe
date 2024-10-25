@@ -15,7 +15,7 @@ $ docker-compose up -d --build
  - собираем и поднимаем контейнеры
 
 ```sh
-$ docker-compose exec web alembic upgrade head
+$ docker-compose exec bet-maker alembic upgrade head
 ```
  - применяем миграции
 
